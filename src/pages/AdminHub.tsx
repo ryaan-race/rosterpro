@@ -91,6 +91,16 @@ export default function AdminHub() {
   const [userCreateSuccess, setUserCreateSuccess] = useState(false);
   const [userCreateError, setUserCreateError] = useState('');
 
+  // Diagnostic State
+  const [isDiagnosticPanelOpen, setIsDiagnosticPanelOpen] = useState(false);
+  const [diagnosticEmail, setDiagnosticEmail] = useState('');
+  const [diagnosticPassword, setDiagnosticPassword] = useState('');
+  const [diagnosticRole, setDiagnosticRole] = useState('normal');
+  const [diagnosticName, setDiagnosticName] = useState('');
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
+  const [diagnosticMsg, setDiagnosticMsg] = useState('');
+  const [diagnosticSuccessMsg, setDiagnosticSuccessMsg] = useState('');
+
   // Editing Form State
   const [editFormName, setEditFormName] = useState('');
   const [editFormEmail, setEditFormEmail] = useState('');
@@ -1200,6 +1210,18 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
                 </button>
 
                 <button
+                  onClick={() => setIsDiagnosticPanelOpen(!isDiagnosticPanelOpen)}
+                  className={`px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer border ${
+                    isDiagnosticPanelOpen 
+                      ? 'bg-rose-500 hover:bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-200' 
+                      : 'bg-rose-50 border-rose-150 text-rose-700 hover:bg-rose-100'
+                  }`}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isDiagnosticPanelOpen ? 'animate-spin' : ''}`} />
+                  Auth Sync & Reset
+                </button>
+
+                <button
                   onClick={() => setIsCsvPanelOpen(!isCsvPanelOpen)}
                   className={`px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer border ${
                     isCsvPanelOpen 
@@ -1305,6 +1327,259 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
                 <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs rounded-xl font-bold flex items-center gap-2 animate-bounce">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                   <span>{csvSuccess}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Collapsible Auth Diagnostics & Quick Reset Tool */}
+          {isDiagnosticPanelOpen && (
+            <div className="p-6 bg-slate-50 border border-rose-200 rounded-3xl space-y-5 animate-fade-in text-left">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h4 className="text-sm font-black text-rose-950 uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                    Firebase Auth Sync & Reset Panel (Direct Credentials Fix)
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-bold mt-1 leading-normal">
+                    Onboard existing registered email accounts, trigger manual password reset dispatches, or register accounts with just an email & password instantly.
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setIsDiagnosticPanelOpen(false)}
+                  className="p-1.5 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4 text-slate-400 hover:text-slate-650" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 bg-white p-5 border border-slate-200 rounded-2xl">
+                {/* 1. Quick Password Reset Email */}
+                <div className="space-y-4 pr-0 lg:pr-6 border-b lg:border-b-0 lg:border-r border-slate-100 pb-6 lg:pb-0">
+                  <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1.5">
+                    ⚙️ Action Type A: Instant Password Reset Link
+                  </span>
+                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                    If an email (like <span className="font-bold underline text-slate-705">kajal.salavane@myphoneme.com</span>) is already registered in Firebase but they cannot sign in, type her email here. This sends a password reset email immediately. Once they reset and sign in, their Firestore listing is automatically self-provisioned!
+                  </p>
+                  
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Target Email Address</label>
+                      <input
+                        type="email"
+                        placeholder="Enter target email (e.g. kajal.salavane@myphoneme.com)"
+                        value={diagnosticEmail}
+                        onChange={(e) => setDiagnosticEmail(e.target.value)}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white focus:border-rose-500 transition-all font-sans"
+                      />
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!diagnosticEmail) {
+                          alert("Please specify the target email address first.");
+                          return;
+                        }
+                        setDiagnosticLoading(true);
+                        setDiagnosticMsg('');
+                        setDiagnosticSuccessMsg('');
+                        try {
+                          await sendPasswordResetEmail(auth, diagnosticEmail.trim());
+                          setDiagnosticSuccessMsg(`Password reset correlation link successfully sent to ${diagnosticEmail.trim()}! Check spam if not received within 2 minutes.`);
+                        } catch (err: any) {
+                          setDiagnosticMsg(getFriendlyAuthErrorMessage(err));
+                        } finally {
+                          setDiagnosticLoading(false);
+                        }
+                      }}
+                      disabled={diagnosticLoading}
+                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-md shadow-indigo-100 flex items-center justify-center gap-1.5"
+                    >
+                      {diagnosticLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+                      Transmit Reset & Recovery Email
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Quick Micro-Onboarder */}
+                <div className="space-y-4 pl-0 lg:pl-6">
+                  <span className="text-[10px] font-black text-indigo-650 uppercase tracking-widest flex items-center gap-1.5">
+                    🚀 Action Type B: Quick Onboard with Email & Password Only
+                  </span>
+                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                    Accelerated onboarding. Specify the email & temporary access password to generate the Firebase authentication and Firestore listing. Default name & profile values are self-provisioned.
+                  </p>
+
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Display Name</label>
+                      <input
+                        type="text"
+                        placeholder="Display Name (e.g. Kajal Salavane)"
+                        value={diagnosticName}
+                        onChange={(e) => setDiagnosticName(e.target.value)}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white focus:border-indigo-500 transition-all font-sans"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Onboarding Email</label>
+                        <input
+                          type="email"
+                          placeholder="Onboarding Email"
+                          value={diagnosticEmail}
+                          onChange={(e) => setDiagnosticEmail(e.target.value)}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white focus:border-indigo-500 transition-all font-sans"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Access Password</label>
+                        <input
+                          type="password"
+                          placeholder="Password (min 6)"
+                          value={diagnosticPassword}
+                          onChange={(e) => setDiagnosticPassword(e.target.value)}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white focus:border-indigo-500 transition-all font-sans"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Authorized Role</label>
+                      <CustomSelect
+                        value={diagnosticRole}
+                        onChange={(val) => setDiagnosticRole(val)}
+                        options={[
+                          { value: 'normal', label: 'Normal Employee' },
+                          { value: 'hr', label: 'Human Resource (HR)' },
+                          { value: 'manager', label: 'General Manager' },
+                          { value: 'admin', label: 'Administrator' },
+                          { value: 'super_admin', label: 'Super Admin' }
+                        ]}
+                        classNameButton="px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase tracking-widest min-h-[42px]"
+                      />
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const email = diagnosticEmail.trim();
+                        const pass = diagnosticPassword.trim();
+                        const name = diagnosticName.trim() || email.split('@')[0];
+                        if (!email || !pass) {
+                          alert("Please enter both the onboarding email and the temporary password.");
+                          return;
+                        }
+                        if (pass.length < 6) {
+                          alert("Password must be at least 6 characters.");
+                          return;
+                        }
+                        setDiagnosticLoading(true);
+                        setDiagnosticMsg('');
+                        setDiagnosticSuccessMsg('');
+                        try {
+                          // Try creating primary authentication account
+                          const secAuth = getSecondaryAuthForAdminHub();
+                          const userCred = await createUserWithEmailAndPassword(secAuth, email, pass);
+                          const newUid = userCred.user.uid;
+                          await secAuth.signOut();
+
+                          // Store in Firestore
+                          const newUserData = {
+                            uid: newUid,
+                            employeeId: 'EMP-' + newUid.slice(0, 6).toUpperCase(),
+                            name: name,
+                            email: email,
+                            password: pass,
+                            role: diagnosticRole,
+                            department: 'General',
+                            status: 'Active',
+                            designation: 'Staff Associate',
+                            phone: '',
+                            address: '',
+                            joiningDate: new Date().toISOString().split('T')[0],
+                            gender: '',
+                            skillTags: [],
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString()
+                          };
+                          await setDoc(doc(db, 'users', newUid), newUserData);
+                          setDiagnosticSuccessMsg(`Direct onboarding synchronization complete! ${email} is registered with password and profile created in Firestore successfully.`);
+                          setDiagnosticName('');
+                          setDiagnosticEmail('');
+                          setDiagnosticPassword('');
+                        } catch (err: any) {
+                          if (err.code === 'auth/email-already-in-use') {
+                            setDiagnosticMsg(`Authentication says "${email}" is ALREADY registered in Firebase. To connect them, click "Transmit Reset & Recovery Email" on the left to reset her password, or click the "Force-Onboard Document" button below to bypass this warning and instantly publish her database directory log.`);
+                          } else {
+                            setDiagnosticMsg("Failed: " + getFriendlyAuthErrorMessage(err));
+                          }
+                        } finally {
+                          setDiagnosticLoading(false);
+                        }
+                      }}
+                      disabled={diagnosticLoading}
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-md shadow-emerald-150 flex items-center justify-center gap-1.5"
+                    >
+                      {diagnosticLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+                      Onboard User & Pre-Sync Firestore Now
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {diagnosticMsg && (
+                <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-2xl font-bold flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+                  <div className="space-y-2">
+                    <span>{diagnosticMsg}</span>
+                    {diagnosticMsg.includes('ALREADY registered') && (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!window.confirm(`Force write a synced Firestore record for ${diagnosticEmail}?`)) return;
+                            setDiagnosticLoading(true);
+                            try {
+                              const placeholderUid = "forced_" + Math.random().toString(36).substring(2, 9);
+                              const newUserData = {
+                                uid: placeholderUid,
+                                employeeId: 'EMP-' + placeholderUid.toUpperCase(),
+                                name: diagnosticName || diagnosticEmail.split('@')[0],
+                                email: diagnosticEmail.trim(),
+                                password: diagnosticPassword || 'ShiftSync2026!',
+                                role: diagnosticRole,
+                                department: 'General',
+                                status: 'Active',
+                                designation: 'Staff Associate',
+                                phone: '',
+                                address: '',
+                                joiningDate: new Date().toISOString().split('T')[0],
+                                gender: '',
+                                skillTags: [],
+                                createdAt: new Date().toISOString(),
+                                updatedAt: new Date().toISOString()
+                              };
+                              await setDoc(doc(db, 'users', placeholderUid), newUserData);
+                              setDiagnosticSuccessMsg(`Successfully force-created Firestore database listing for ${diagnosticEmail.trim()}. They will appear on the personnel directory list!`);
+                              setDiagnosticMsg('');
+                            } catch (err: any) {
+                              alert("Force-create error: " + err.message);
+                            } finally {
+                              setDiagnosticLoading(false);
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-[9px] uppercase tracking-wider rounded-lg transition-all"
+                        >
+                          🛠️ Force-Onboard Document and Ignore Firebase Auth constraint
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {diagnosticSuccessMsg && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl font-bold flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <span>{diagnosticSuccessMsg}</span>
                 </div>
               )}
             </div>
