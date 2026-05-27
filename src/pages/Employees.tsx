@@ -17,7 +17,7 @@ import { handleFirestoreError, OperationType, cn, getFriendlyAuthErrorMessage } 
 import { collection, onSnapshot, query, setDoc, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../components/AuthProvider';
 import { useConfig } from '../components/ConfigProvider';
-import { Trash2, User as UserIcon, Camera, Image } from 'lucide-react';
+import { Trash2, User as UserIcon, Camera, Image, Eye, EyeOff } from 'lucide-react';
 import { Avatar } from '../lib/Avatar';
 import ImageUpload from '../components/ImageUpload';
 import { CustomSelect } from '../components/CustomSelect';
@@ -204,6 +204,7 @@ export default function Employees() {
   const [formDept, setFormDept] = useState('');
   const [formRole, setFormRole] = useState('normal');
   const [formStatus, setFormStatus] = useState('Active');
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleEditClick = (emp: any) => {
     setEditingEmployee(emp);
@@ -716,6 +717,7 @@ export default function Employees() {
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => {
             setIsAddModalOpen(false);
             setEditingEmployee(null);
+            setShowPassword(false);
           }} />
           <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 max-h-[90vh] overflow-y-auto">
             <h3 className="font-black text-xl text-slate-900 mb-6">{editingEmployee ? 'Edit Team Member' : 'Add New Team Member'}</h3>
@@ -784,14 +786,24 @@ export default function Employees() {
               {!editingEmployee && (
                 <div className="space-y-1 bg-slate-50/50 p-4 border border-dashed border-slate-200 rounded-2xl">
                   <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest px-1">Initial Access Password</label>
-                  <input 
-                    name="password" 
-                    type="password" 
-                    required={!editingEmployee} 
-                    placeholder="Create secure access key (min 6 chars)" 
-                    minLength={6}
-                    className="w-full px-5 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all shadow-sm" 
-                  />
+                  <div className="relative group/input">
+                    <input 
+                      name="password" 
+                      type={showPassword ? "text" : "password"} 
+                      required={!editingEmployee} 
+                      placeholder="Create secure access key (min 6 chars)" 
+                      minLength={6}
+                      className="w-full pl-5 pr-12 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all shadow-sm font-sans" 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 focus:outline-none transition-colors cursor-pointer"
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                    </button>
+                  </div>
                   <p className="text-[9px] text-slate-400 font-bold px-1 mt-1">This user will use their email and this password to log in.</p>
                 </div>
               )}
@@ -910,6 +922,7 @@ export default function Employees() {
                   onClick={() => {
                     setIsAddModalOpen(false);
                     setEditingEmployee(null);
+                    setShowPassword(false);
                   }} 
                   className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
                 >
