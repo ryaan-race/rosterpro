@@ -28,7 +28,9 @@ import {
   Download,
   Upload,
   Copy,
-  KeyRound
+  KeyRound,
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 import { db, auth } from '../lib/firebase';
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, where, getDocs } from 'firebase/firestore';
@@ -90,6 +92,15 @@ export default function AdminHub() {
   const [userCreateLoading, setUserCreateLoading] = useState(false);
   const [userCreateSuccess, setUserCreateSuccess] = useState(false);
   const [userCreateError, setUserCreateError] = useState('');
+  const [showForceSyncOption, setShowForceSyncOption] = useState(false);
+  const [appAlert, setAppAlert] = useState<{ show: boolean; title: string; message: string; isConfirm?: boolean; onConfirm?: () => void; type?: 'info' | 'success' | 'warn' | 'error' } | null>(null);
+
+  const triggerAlert = (message: string, title: string = "Notice", type: 'info' | 'success' | 'warn' | 'error' = 'info') => {
+    setAppAlert({ show: true, title, message, type });
+  };
+  const triggerConfirm = (message: string, onConfirm: () => void, title: string = "Confirmation") => {
+    setAppAlert({ show: true, title, message, isConfirm: true, onConfirm, type: 'warn' });
+  };
 
   // Diagnostic State
   const [isDiagnosticPanelOpen, setIsDiagnosticPanelOpen] = useState(false);
@@ -206,9 +217,9 @@ export default function AdminHub() {
         recoveryUrl: recoveryUrl
       });
 
-      alert(`Bypass temporary password successfully configured in DB. Share recovery transcript below!`);
+      triggerAlert(`Bypass temporary password successfully configured in DB. Share recovery transcript below!`, "Setup Configured", "success");
     } catch (err: any) {
-      alert("Failed to build access recovery pack: " + err.message);
+      triggerAlert("Failed to build access recovery pack: " + err.message, "Operation Failed", "error");
     } finally {
       setIsGeneratingRecovery(false);
     }
@@ -254,10 +265,10 @@ Temp Password: ${generatedRecoveryPack.tempPassword}
 Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
     
     navigator.clipboard.writeText(text).then(() => {
-      alert("Recovery Transcript details successfully copied to clipboard.");
+      triggerAlert("Recovery Transcript details successfully copied to clipboard.", "Copied", "success");
     }).catch(err => {
       console.error(err);
-      alert("Clipboard exception: " + err.message);
+      triggerAlert("Clipboard exception: " + err.message, "Copy Failed", "error");
     });
   };
 
@@ -413,7 +424,7 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
   const handleExportCSV = () => {
     try {
       if (filteredUsers.length === 0) {
-        alert("Zero logs match filters to download CSV reports.");
+        triggerAlert("Zero logs match filters to download CSV reports.", "Empty Dataset", "warn");
         return;
       }
       
@@ -448,7 +459,7 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
       link.click();
       document.body.removeChild(link);
     } catch (err: any) {
-      alert("Failed generating export file: " + err.message);
+      triggerAlert("Failed generating export file: " + err.message, "Export Failed", "error");
     }
   };
 
@@ -483,7 +494,7 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
   // Handle register user
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userFormEmail || !userFormPassword || !userFormName) {
+    if (!userFormEmail || !userFormPassword) {
       setUserCreateError('Please complete all required fields.');
       return;
     }
@@ -491,6 +502,10 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
     setUserCreateLoading(true);
     setUserCreateSuccess(false);
     setUserCreateError('');
+    setShowForceSyncOption(false);
+
+    // Default Name if none provided (e.g., kajal.salavane -> Kajal Salavane)
+    const finalName = userFormName.trim() || userFormEmail.split('@')[0].split(/[._-]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
     try {
       const secAuth = getSecondaryAuthForAdminHub();
@@ -501,7 +516,7 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
       const newUserData = {
         uid: newUid,
         employeeId: userFormEmployeeId || ('EMP-' + newUid.slice(0, 6).toUpperCase()),
-        name: userFormName,
+        name: finalName,
         email: userFormEmail,
         password: userFormPassword,
         role: userFormRole,
@@ -537,7 +552,91 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
       setTimeout(() => setUserCreateSuccess(false), 3000);
     } catch (err: any) {
       console.error(err);
-      setUserCreateError(getFriendlyAuthErrorMessage(err));
+      const friendlyErr = getFriendlyAuthErrorMessage(err);
+      setUserCreateError(friendlyErr);
+      if (err.code === 'auth/email-already-in-use' || String(err).includes('email-already-in-use') || friendlyErr.toLowerCase().includes('already registered') || friendlyErr.toLowerCase().includes('already in use')) {
+        setShowForceSyncOption(true);
+      }
+    } finally {
+      setUserCreateLoading(false);
+    }
+  };
+
+  const handleForceSyncUser = async () => {
+    if (!userFormEmail) return;
+    setUserCreateLoading(true);
+    setUserCreateError('');
+    setShowForceSyncOption(false);
+    
+    // Default Name if none provided
+    const finalName = userFormName.trim() || userFormEmail.split('@')[0].split(/[._-]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+
+    try {
+      const existingUserDoc = allUsers.find(u => u.email.toLowerCase().trim() === userFormEmail.toLowerCase().trim());
+      
+      let finalDocUid = '';
+      if (existingUserDoc) {
+        finalDocUid = existingUserDoc.uid;
+      } else {
+        finalDocUid = 'ext_sync_' + Math.random().toString(36).substring(2, 9);
+      }
+
+      const syncedUserData = {
+        uid: finalDocUid,
+        employeeId: userFormEmployeeId || ('EMP-' + finalDocUid.slice(0, 6).toUpperCase()),
+        name: finalName,
+        email: userFormEmail,
+        password: userFormPassword || 'ShiftSync2026!',
+        role: userFormRole,
+        department: userFormDept || 'General',
+        status: userFormStatus || 'Active',
+        designation: userFormDesignation || '',
+        phone: userFormPhone || '',
+        address: userFormAddress || '',
+        joiningDate: userFormJoiningDate || new Date().toISOString().split('T')[0],
+        gender: userFormGender || '',
+        skillTags: userFormSkillTags ? userFormSkillTags.split(',').map(s => s.trim()).filter(Boolean) : [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await setDoc(doc(db, 'users', finalDocUid), syncedUserData);
+      
+      setUserFormName('');
+      setUserFormEmail('');
+      setUserFormPassword('');
+      setUserFormRole('normal');
+      setUserFormDept('');
+      setUserFormDesignation('');
+      setUserFormPhone('');
+      setUserFormEmployeeId('');
+      setUserFormJoiningDate('');
+      setUserFormGender('');
+      setUserFormAddress('');
+      setUserFormSkillTags('');
+
+      setUserCreateSuccess(true);
+      setTimeout(() => setUserCreateSuccess(false), 3000);
+      triggerAlert(`Successfully force-synced real-time profile for ${userFormEmail}! They are now part of your directory.`, "Database Synchronized", "success");
+    } catch (err: any) {
+      console.error(err);
+      setUserCreateError("Sync error: " + err.message);
+    } finally {
+      setUserCreateLoading(false);
+    }
+  };
+
+  const handleTriggerResetForFormEmail = async () => {
+    if (!userFormEmail) return;
+    setUserCreateLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, userFormEmail);
+      setUserCreateSuccess(true);
+      setUserCreateError('');
+      setShowForceSyncOption(false);
+      triggerAlert(`A password reset link has been dispatched to ${userFormEmail} so they can recover their password.`, "Reset Linked Emailed", "success");
+    } catch (err: any) {
+      setUserCreateError("Reset Link transmission error: " + getFriendlyAuthErrorMessage(err));
     } finally {
       setUserCreateLoading(false);
     }
@@ -636,54 +735,58 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
   // Delete User Account Completely from Firestore and Firebase Authentication
   const handleDeleteUser = async (uid: string, email: string, password?: string) => {
     if (uid === user?.uid) {
-      alert("Self-deletion is blocked for security purposes. Please contact another system administrator.");
+      triggerAlert("Self-deletion is blocked for security purposes. Please contact another system administrator.", "Security Block", "error");
       return;
     }
     
-    if (!window.confirm(`Are you absolutely sure you want to completely delete ${email}'s record from Firestore and Firebase Authentication? Once deleted, you will be able to register another staff account with the exact same email address.`)) return;
-    
-    try {
-      // Step 1: Attempt to delete from Auth using secondary Auth App instance
-      const secAuth = getSecondaryAuthForAdminHub();
-      let passwordToUse = password || manualOldPassword;
-      if (passwordToUse) {
+    triggerConfirm(
+      `Are you absolutely sure you want to completely delete ${email}'s record from Firestore and Firebase Authentication? Once deleted, you will be able to register another staff account with the exact same email address.`,
+      async () => {
         try {
-          const userCred = await signInWithEmailAndPassword(secAuth, email, passwordToUse);
-          if (userCred.user) {
-            const { deleteUser } = await import('firebase/auth');
-            await deleteUser(userCred.user);
-            console.log("Firebase Authentication account successfully deleted.");
+          // Step 1: Attempt to delete from Auth using secondary Auth App instance
+          const secAuth = getSecondaryAuthForAdminHub();
+          let passwordToUse = password || manualOldPassword;
+          if (passwordToUse) {
+            try {
+              const userCred = await signInWithEmailAndPassword(secAuth, email, passwordToUse);
+              if (userCred.user) {
+                const { deleteUser } = await import('firebase/auth');
+                await deleteUser(userCred.user);
+                console.log("Firebase Authentication account successfully deleted.");
+              }
+            } catch (authErr: any) {
+              console.warn("Secondary Auth deletion skipped or user not found/already deleted:", authErr);
+            }
+          } else {
+            console.warn("No stored password found. Directly deleting Firestore record instead.");
           }
-        } catch (authErr: any) {
-          console.warn("Secondary Auth deletion skipped or user not found/already deleted:", authErr);
+
+          // Step 2: Delete associated attendance and work reports
+          try {
+            const attendanceQuery = query(collection(db, 'attendance'), where('employeeId', '==', uid));
+            const attendanceSnap = await getDocs(attendanceQuery);
+            const attendanceDeletes = attendanceSnap.docs.map(d => deleteDoc(d.ref));
+
+            const reportsQuery = query(collection(db, 'workReports'), where('employeeId', '==', uid));
+            const reportsSnap = await getDocs(reportsQuery);
+            const reportsDeletes = reportsSnap.docs.map(d => deleteDoc(d.ref));
+
+            await Promise.all([...attendanceDeletes, ...reportsDeletes]);
+            console.log("Associated attendance and work reports cleaned up successfully.");
+          } catch (cleanupErr: any) {
+            console.warn("Non-blocking cleanup of associated records encountered some errors:", cleanupErr);
+          }
+
+          // Step 3: Delete Firestore Document
+          await deleteDoc(doc(db, 'users', uid));
+          triggerAlert(`User ${email} and all associated attendance records/work reports completely deleted from the database.`, "Account Deleted", "success");
+          setEditingUser(null);
+        } catch (err: any) {
+          triggerAlert("Failed to delete record: " + err.message, "Deletion Failed", "error");
         }
-      } else {
-        console.warn("No stored password found. Directly deleting Firestore record instead.");
-      }
-
-      // Step 2: Delete associated attendance and work reports
-      try {
-        const attendanceQuery = query(collection(db, 'attendance'), where('employeeId', '==', uid));
-        const attendanceSnap = await getDocs(attendanceQuery);
-        const attendanceDeletes = attendanceSnap.docs.map(d => deleteDoc(d.ref));
-
-        const reportsQuery = query(collection(db, 'workReports'), where('employeeId', '==', uid));
-        const reportsSnap = await getDocs(reportsQuery);
-        const reportsDeletes = reportsSnap.docs.map(d => deleteDoc(d.ref));
-
-        await Promise.all([...attendanceDeletes, ...reportsDeletes]);
-        console.log("Associated attendance and work reports cleaned up successfully.");
-      } catch (cleanupErr: any) {
-        console.warn("Non-blocking cleanup of associated records encountered some errors:", cleanupErr);
-      }
-
-      // Step 3: Delete Firestore Document
-      await deleteDoc(doc(db, 'users', uid));
-      alert(`User ${email} and all associated attendance records/work reports completely deleted from the database.`);
-      setEditingUser(null);
-    } catch (err: any) {
-      alert("Failed to delete record: " + err.message);
-    }
+      },
+      "Confirm Deletion"
+    );
   };
 
   // Send Manual Reset Email
@@ -691,9 +794,9 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
     if (!targetEmail) return;
     try {
       await sendPasswordResetEmail(auth, targetEmail);
-      alert(`A secure password recovery notice is on its way to ${targetEmail}.`);
+      triggerAlert(`A secure password recovery notice is on its way to ${targetEmail}.`, "Reset Transmitted", "success");
     } catch (err: any) {
-      alert("Failed to transmit reset correspondence: " + getFriendlyAuthErrorMessage(err));
+      triggerAlert("Failed to transmit reset correspondence: " + getFriendlyAuthErrorMessage(err), "Reset Failed", "error");
     }
   };
 
@@ -2262,20 +2365,54 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
               )}
 
               {userCreateError && (
-                <div className="mb-6 p-5 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl flex items-center gap-4 text-xs font-bold">
-                  <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
-                  <span>{userCreateError}</span>
+                <div className="mb-6 p-5 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl flex flex-col gap-3 text-xs font-bold">
+                  <div className="flex items-center gap-4">
+                    <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+                    <span>{userCreateError}</span>
+                  </div>
+                  
+                  {showForceSyncOption && (
+                    <div className="mt-2 p-4 bg-white/95 border border-amber-200 rounded-xl space-y-3 text-[11px] font-medium text-slate-700 shadow-sm leading-relaxed text-left">
+                      <p className="font-extrabold text-amber-800 uppercase tracking-wider flex items-center gap-1.5 font-sans mb-1 text-xs">
+                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                        Conflict Resolved: Bypass Available
+                      </p>
+                      <p>
+                        This email address is already registered inside Firebase Authentication. You can immediately synchronize their database profile document anyway, or trigger a standard password reset link securely:
+                      </p>
+                      
+                      <div className="flex flex-col sm:flex-row gap-2 pt-1 font-sans">
+                        <button
+                          type="button"
+                          onClick={handleForceSyncUser}
+                          className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[9px] font-black uppercase tracking-wider cursor-pointer shadow transition-all text-center"
+                        >
+                          Database Sync: Force Create/Update Profile
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={handleTriggerResetForFormEmail}
+                          className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-wider cursor-pointer shadow transition-all text-center"
+                        >
+                          Transmit Password Reset Email
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Form details */}
               <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-2">
                 <div className="space-y-1.5 text-left">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Full Name</label>
+                  <div className="flex items-center justify-between px-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Full Name</label>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 font-mono bg-slate-100 px-1 py-0.5 rounded">Optional</span>
+                  </div>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. Alisha Bose"
+                    placeholder="Auto-derived from email if empty"
                     value={userFormName}
                     onChange={(e) => setUserFormName(e.target.value)}
                     className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white focus:border-indigo-600 transition-all font-sans text-slate-900"
@@ -2855,6 +2992,68 @@ Setup Password Link: ${generatedRecoveryPack.recoveryUrl}`;
                   </div>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* APP-LEVEL CUSTOM NON-BLOCKING DIALOG MODAL */}
+      <AnimatePresence>
+        {appAlert && appAlert.show && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setAppAlert(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
+            />
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl space-y-4 text-left text-slate-800 z-10"
+            >
+              <div className="flex items-start gap-4">
+                {appAlert.type === 'success' && <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0 mt-0.5" />}
+                {appAlert.type === 'error' && <AlertCircle className="w-6 h-6 text-rose-500 shrink-0 mt-0.5" />}
+                {appAlert.type === 'warn' && <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />}
+                {(!appAlert.type || appAlert.type === 'info') && <Info className="w-6 h-6 text-indigo-500 shrink-0 mt-0.5" />}
+                <div>
+                  <h4 className="font-extrabold text-sm uppercase tracking-wider text-slate-900 leading-none">{appAlert.title}</h4>
+                  <p className="text-xs text-slate-600 mt-2 font-medium leading-relaxed">{appAlert.message}</p>
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-3 font-sans pt-1">
+                {appAlert.isConfirm ? (
+                  <>
+                    <button
+                      onClick={() => setAppAlert(null)}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (appAlert.onConfirm) appAlert.onConfirm();
+                        setAppAlert(null);
+                      }}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shadow-rose-200"
+                    >
+                      Confirm Action
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setAppAlert(null)}
+                    className="px-5 py-2 bg-slate-900 hover:bg-slate-850 text-white font-bold text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm"
+                  >
+                    Dismiss
+                  </button>
+                )}
+              </div>
             </motion.div>
           </div>
         )}
