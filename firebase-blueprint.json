@@ -1,0 +1,132 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents an employee or manager in the system.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["employee", "manager"] },
+        "department": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "On Leave", "Terminated"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Shift": {
+      "title": "Shift",
+      "description": "A scheduled shift for an employee.",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "employeePhone": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["scheduled", "completed", "swapped", "canceled"] },
+        "type": { "type": "string", "enum": ["Morning", "Evening", "Night", "Overtime"] },
+        "department": { "type": "string" },
+        "location": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "employeeName", "startTime", "endTime", "status", "type", "department"]
+    },
+    "SwapRequest": {
+      "title": "SwapRequest",
+      "description": "A request to swap a shift with another employee.",
+      "type": "object",
+      "properties": {
+        "requesterId": { "type": "string" },
+        "requesterName": { "type": "string" },
+        "shiftId": { "type": "string" },
+        "targetEmployeeId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["requesterId", "shiftId", "status"]
+    },
+    "TimeOffRequest": {
+      "title": "TimeOffRequest",
+      "description": "A request for time off.",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "startDate", "endDate", "status"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Clock-in/out records for shifts with photo verification.",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "type": { "type": "string", "enum": ["check-in", "check-out"] },
+        "photoUrl": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "address": { "type": "string" }
+          }
+        }
+      },
+      "required": ["employeeId", "employeeName", "timestamp", "type", "photoUrl"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app notifications for users.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "read": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["shift_change", "swap_request", "time_off_approval", "work_report"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "read", "type"]
+    },
+    "WorkReport": {
+      "title": "WorkReport",
+      "description": "A report submitted by an employee after their shift.",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "shiftId": { "type": "string" },
+        "shiftDate": { "type": "string", "format": "date-time" },
+        "shiftType": { "type": "string" },
+        "tasksCompleted": { "type": "string" },
+        "handoverNotes": { "type": "string" },
+        "issuesEncountered": { "type": "string" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["draft", "submitted", "reviewed"] },
+        "managerComments": { "type": "string" }
+      },
+      "required": ["employeeId", "employeeName", "shiftId", "shiftDate", "shiftType", "tasksCompleted", "submittedAt", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profiles" },
+    "/shifts/{shiftId}": { "schema": "Shift", "description": "Work shifts" },
+    "/swapRequests/{requestId}": { "schema": "SwapRequest", "description": "Shift swap requests" },
+    "/timeOffRequests/{requestId}": { "schema": "TimeOffRequest", "description": "Time off requests" },
+    "/attendance/{attendanceId}": { "schema": "Attendance", "description": "Attendance tracking" },
+    "/notifications/{notifId}": { "schema": "Notification", "description": "User notifications" },
+    "/workReports/{reportId}": { "schema": "WorkReport", "description": "Post-shift work reports" }
+  }
+}

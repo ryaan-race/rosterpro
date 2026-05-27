@@ -1,0 +1,196 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isRajesh() { return isSignedIn() && request.auth.token.get('email', '').lower() == 'rajesh.myphoneme@gmail.com'; }
+    function isVerified() { 
+      return isSignedIn() && (
+        request.auth.token.get('email_verified', false) == true || 
+        request.auth.token.get('firebase', {}).get('sign_in_provider', '') == 'google.com' ||
+        isRajesh()
+      ); 
+    }
+    
+    function isAdmin() { 
+      return isRajesh() || (
+        isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '').lower() in ['manager', 'admin', 'noc team', 'super_admin', 'hr']
+      ); 
+    }
+
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // --- Entity Validations ---
+    function isValidUser(data) {
+      return isRajesh() || (
+        data.keys().hasAll(['uid', 'name', 'email', 'role']) &&
+        data.uid is string &&
+        data.email is string &&
+        data.name is string &&
+        data.role is string
+      );
+    }
+
+    function isValidSettings(data) {
+      return isRajesh() || (
+        data.get('companyName', '') is string &&
+        data.get('departments', []) is list &&
+        data.get('shiftTypes', []) is list
+      );
+    }
+
+    function isValidShift(data) {
+      return isRajesh() || (
+        data.keys().hasAll(['employeeId', 'employeeName', 'startTime', 'endTime', 'status', 'type', 'department']) &&
+        data.employeeId is string &&
+        data.employeeName is string &&
+        data.startTime is string &&
+        data.endTime is string &&
+        data.status in ['scheduled', 'completed', 'swapped', 'canceled'] &&
+        data.type is string &&
+        data.department is string &&
+        (!data.keys().hasAny(['employeePhone']) || (data.employeePhone is string && data.employeePhone.size() <= 100)) &&
+        (!data.keys().hasAny(['location']) || (data.location is string && data.location.size() <= 500)) &&
+        (!data.keys().hasAny(['notes']) || (data.notes is string && data.notes.size() <= 5000)) &&
+        (!data.keys().hasAny(['createdAt']) || data.createdAt is string) &&
+        (!data.keys().hasAny(['updatedAt']) || data.updatedAt is string)
+      );
+    }
+
+    function isValidTimeOff(data) {
+      return isRajesh() || (
+        data.keys().hasAll(['employeeId', 'employeeName', 'startDate', 'endDate', 'reason', 'status', 'createdAt']) &&
+        data.employeeId == request.auth.uid &&
+        data.status == 'pending' &&
+        data.reason is string && data.reason.size() <= 1000 &&
+        data.startDate is string &&
+        data.endDate is string
+      );
+    }
+
+    function isValidSwapRequest(data) {
+      return isRajesh() || (
+        data.keys().hasAll(['requesterId', 'requesterName', 'date', 'time', 'dept', 'type', 'status', 'createdAt', 'updatedAt']) &&
+        data.requesterId is string &&
+        data.requesterName is string &&
+        data.status in ['pending', 'offered', 'accepted', 'approved', 'declined', 'completed', 'rejected', 'responded'] &&
+        data.type in ['Swap', 'Cover'] &&
+        (!data.keys().hasAny(['requesterAvatar']) || (data.requesterAvatar is string && data.requesterAvatar.size() <= 3000)) &&
+        (!data.keys().hasAny(['targetEmployeeId']) || data.targetEmployeeId is string) &&
+        (!data.keys().hasAny(['targetEmployeeName']) || data.targetEmployeeName is string) &&
+        (!data.keys().hasAny(['targetMessage']) || data.targetMessage is string) &&
+        (!data.keys().hasAny(['message']) || data.message is string) &&
+        (!data.keys().hasAny(['gender']) || data.gender is string)
+      );
+    }
+
+    function isValidAttendance(data) {
+      return isRajesh() || (
+        data.employeeId == request.auth.uid && (
+          // Pattern 1: Live Attendance (with Selfie)
+          (
+            data.keys().hasAll(['employeeId', 'employeeName', 'timestamp', 'type', 'photoUrl']) &&
+            data.type in ['check-in', 'check-out', 'break-start', 'break-end'] &&
+            data.photoUrl is string && data.photoUrl.size() <= 5000000
+          ) ||
+          // Pattern 2: Simple Clock In/Out (Dashboard)
+          (
+            data.keys().hasAll(['employeeId', 'clockIn']) &&
+            (!data.keys().hasAny(['clockOut']) || data.clockOut is string)
+          )
+        )
+      );
+    }
+
+    function isValidWorkReport(data) {
+      return isRajesh() || (
+        data.keys().hasAll(['employeeId', 'employeeName', 'shiftId', 'shiftDate', 'shiftType', 'tasksCompleted', 'submittedAt', 'status']) &&
+        data.employeeId == request.auth.uid &&
+        data.employeeName is string &&
+        data.shiftId is string &&
+        data.shiftDate is string &&
+        data.shiftType is string &&
+        data.tasksCompleted is string && data.tasksCompleted.size() <= 10000 &&
+        data.submittedAt is string &&
+        data.status in ['draft', 'submitted', 'reviewed'] &&
+        (!data.keys().hasAny(['handoverNotes']) || (data.handoverNotes is string && data.handoverNotes.size() <= 5000)) &&
+        (!data.keys().hasAny(['issuesEncountered']) || (data.issuesEncountered is string && data.issuesEncountered.size() <= 5000)) &&
+        (!data.keys().hasAny(['managerComments']) || (data.managerComments is string && data.managerComments.size() <= 5000))
+      );
+    }
+
+    // --- Rules ---
+
+    // Settings collection
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /shifts/{shiftId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /timeOffRequests/{requestId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /swapRequests/{requestId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /availability/{availId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && (isRajesh() || isOwner(resource.data.userId) || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidAttendance(incoming());
+      allow update, delete: if isAdmin();
+    }
+
+    match /workReports/{reportId} {
+      allow read: if isSignedIn() && (isOwner(resource.data.employeeId) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.employeeId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidWorkReport(incoming());
+      allow update: if isSignedIn() && (
+        (isOwner(existing().employeeId) && isValidWorkReport(incoming()) && incoming().status == 'submitted') ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /weekOffPreferences/{prefId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+  }
+}

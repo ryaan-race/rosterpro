@@ -1,0 +1,6 @@
+{
+  "name": "ShiftSync",
+  "description": "Smart workforce management platform. Real-time shift scheduling, advanced attendance tracking, and seamless team coordination.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
