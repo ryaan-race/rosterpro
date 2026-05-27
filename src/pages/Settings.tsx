@@ -18,7 +18,9 @@ import {
   Users,
   UserPlus,
   Mail,
-  Edit
+  Edit,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, updateDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
@@ -73,6 +75,7 @@ export default function Settings() {
   const [userFormName, setUserFormName] = useState('');
   const [userFormEmail, setUserFormEmail] = useState('');
   const [userFormPassword, setUserFormPassword] = useState('');
+  const [showSettingsUserPassword, setShowSettingsUserPassword] = useState(false);
   const [userFormRole, setUserFormRole] = useState('normal');
   const [userFormDept, setUserFormDept] = useState('');
   const [userFormStatus, setUserFormStatus] = useState('Active');
@@ -1109,15 +1112,25 @@ export default function Settings() {
 
                     <div className="space-y-1.5 text-left">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Initial Sign-In Password</label>
-                      <input
-                        type="password"
-                        required
-                        minLength={6}
-                        placeholder="Create secure access code (min 6 chars)"
-                        value={userFormPassword}
-                        onChange={(e) => setUserFormPassword(e.target.value)}
-                        className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white focus:border-indigo-600 transition-all font-sans text-slate-900"
-                      />
+                      <div className="relative group/input">
+                        <input
+                          type={showSettingsUserPassword ? "text" : "password"}
+                          required
+                          minLength={6}
+                          placeholder="Create secure access code (min 6 chars)"
+                          value={userFormPassword}
+                          onChange={(e) => setUserFormPassword(e.target.value)}
+                          className="w-full pl-5 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white focus:border-indigo-600 transition-all font-sans text-slate-900"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSettingsUserPassword(!showSettingsUserPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 focus:outline-none transition-colors cursor-pointer"
+                          title={showSettingsUserPassword ? "Hide password" : "Show password"}
+                        >
+                          {showSettingsUserPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                        </button>
+                      </div>
                     </div>
 
                      <div className="space-y-1.5 text-left">
